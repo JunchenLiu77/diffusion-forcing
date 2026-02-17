@@ -53,21 +53,41 @@ class Attention(nn.Module):
             SDPBackend.EFFICIENT_ATTENTION,
         ]
 
-        device_properties = torch.cuda.get_device_properties(torch.device("cuda"))
+        self.cuda_backends = None  # resolved lazily on first forward pass
 
-        if device_properties.major >= 8 and device_properties.minor == 0:
-            print_once(
-                "A100 GPU detected, using flash attention if input tensor is on cuda"
-            )
-            self.cuda_backends = [SDPBackend.FLASH_ATTENTION]
-        else:
-            print_once(
-                "Non-A100 GPU detected, using math or mem efficient attention if input tensor is on cuda"
-            )
+    def _resolve_cuda_backends(self):
+        """Lazily resolve CUDA attention backends based on actual GPU capability."""
+        if self.cuda_backends is not None:
+            return self.cuda_backends
+
+        try:
+            device_properties = torch.cuda.get_device_properties(torch.device("cuda"))
+            # Flash attention is supported on compute capability >= 8.0
+            # (A100 = 8.0, H100 = 9.0, etc.)
+            if device_properties.major >= 8:
+                gpu_name = device_properties.name
+                print_once(
+                    f"{gpu_name} detected (sm_{device_properties.major}{device_properties.minor}), "
+                    f"using flash attention"
+                )
+                self.cuda_backends = [SDPBackend.FLASH_ATTENTION]
+            else:
+                print_once(
+                    "GPU with compute capability < 8.0 detected, "
+                    "using math or mem efficient attention"
+                )
+                self.cuda_backends = [
+                    SDPBackend.MATH,
+                    SDPBackend.EFFICIENT_ATTENTION,
+                ]
+        except RuntimeError:
+            print_once("Could not query CUDA device, falling back to math attention")
             self.cuda_backends = [
                 SDPBackend.MATH,
                 SDPBackend.EFFICIENT_ATTENTION,
             ]
+
+        return self.cuda_backends
 
     def forward(self, hidden_states: torch.Tensor, is_causal: bool = False):
         q, k, v = self.to_qkv(hidden_states).chunk(3, dim=-1)
@@ -80,9 +100,10 @@ class Attention(nn.Module):
             q = self.rotary_emb.rotate_queries_or_keys(q)
             k = self.rotary_emb.rotate_queries_or_keys(k)
 
+        cuda_backends = self._resolve_cuda_backends()
         # Flash / Memory efficient attention leads to cuda errors for large batch sizes
         backends = (
-            ([SDPBackend.MATH] if q.shape[0] >= 65536 else self.cuda_backends)
+            ([SDPBackend.MATH] if q.shape[0] >= 65536 else cuda_backends)
             if q.is_cuda
             else self.cpu_backends
         )

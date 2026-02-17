@@ -239,13 +239,14 @@ class Diffusion(nn.Module):
 
         if not self.use_fused_snr:
             # min SNR reweighting
-            match self.objective:
-                case "pred_noise":
-                    return clipped_snr / snr
-                case "pred_x0":
-                    return clipped_snr
-                case "pred_v":
-                    return clipped_snr / (snr + 1)
+            if self.objective == "pred_noise":
+                return clipped_snr / snr
+            elif self.objective == "pred_x0":
+                return clipped_snr
+            elif self.objective == "pred_v":
+                return clipped_snr / (snr + 1)
+            else:
+                raise ValueError(f"unknown objective {self.objective}")
 
         cum_snr = torch.zeros_like(normalized_snr)
         for t in range(0, noise_levels.shape[0]):
@@ -258,15 +259,14 @@ class Diffusion(nn.Module):
         clipped_fused_snr = 1 - (1 - cum_snr * self.cum_snr_decay) * (1 - normalized_clipped_snr)
         fused_snr = 1 - (1 - cum_snr * self.cum_snr_decay) * (1 - normalized_snr)
 
-        match self.objective:
-            case "pred_noise":
-                return clipped_fused_snr / fused_snr
-            case "pred_x0":
-                return clipped_fused_snr * self.snr_clip
-            case "pred_v":
-                return clipped_fused_snr * self.snr_clip / (fused_snr * self.snr_clip + 1)
-            case _:
-                raise ValueError(f"unknown objective {self.objective}")
+        if self.objective == "pred_noise":
+            return clipped_fused_snr / fused_snr
+        elif self.objective == "pred_x0":
+            return clipped_fused_snr * self.snr_clip
+        elif self.objective == "pred_v":
+            return clipped_fused_snr * self.snr_clip / (fused_snr * self.snr_clip + 1)
+        else:
+            raise ValueError(f"unknown objective {self.objective}")
 
     def forward(
         self,

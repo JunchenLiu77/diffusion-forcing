@@ -29,21 +29,15 @@ First of all, if you are interested in higher quality video generation only, ple
 Run `conda create python=3.10 -n diffusion-forcing` to create environment.
 Run `conda activate diffusion-forcing` to activate this environment.
 
-Install dependencies for time series, video and robotics:
+Install dependencies for video generation:
 
 ```
-pip install -r requirements.txt
+pip install -r requirements_video.txt
 ```
 
 [Sign up](https://wandb.ai/site) a wandb account for cloud logging and checkpointing. In command line, run `wandb login` to login.
 
 Then modify the wandb entity in `configurations/config.yaml` to your wandb account.
-
-Optionally, if you want to do maze planning, install the following complicated dependencies due to outdated dependencies of d4rl. This involves first installing mujoco 210 and then run
-
-```
-pip install -r extra_requirements.txt
-```
 
 ## Quick start with pretrained checkpoints
 
@@ -61,33 +55,6 @@ Autoregressively generate minecraft video with 1x the length it's trained on:
 To let the model roll out **longer than it's trained on**, simply append `dataset.validation_multiplier=8` to the above commands, and it will rollout `8x` longer than maximum sequence length it's trained on.
 
 The above checkpoint is trained for 100K steps with small number of frames. We've already verified diffusion forcing works in latent diffusion setting and can be extended to many more tokens without sacrificing compositionally (with some addition techniques outside this repo)! Stay tuned for our next project!
-
-### Maze Planning:
-
-The maze planning setting is changed a bit as we gain more insighs, please see corresponding paragraphs in training section for details. We haven't reimplemented MCTG yet, but you can already see nice visualizations on wandb log.
-
-Medium Maze
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_medium dataset.action_mean=[] dataset.action_std=[] dataset.observation_mean=[3.5092521,3.4765592] dataset.observation_std=[1.3371079,1.52102] load=outputs/maze2d_medium_x.ckpt experiment.tasks=[validation] algorithm.guidance_scale=3 +name=maze2d_medium_x_sampling`
-
-Large Maze
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_large dataset.observation_mean=[3.7296331,5.3047247] dataset.observation_std=[1.8070312,2.5687592] dataset.action_mean=[] dataset.action_std=[] load=outputs/maze2d_large_x.ckpt experiment.tasks=[validation] algorithm.guidance_scale=2 +name=maze2d_large_x_sampling`
-
-We also explored a couple more settings but haven't reimplemented everything in original paper yet. If you are interestted in those checkpoints, see the source code of this README file for ckpt loading instructions that's commented out.
-
-<!--
-Here is also a position + velocity setting ckpt, but we don't recommend this because diffusing quantity and its derivative together creates some bad optimization landscape.
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_medium dataset.observation_std=[2.6742158,3.04204,9.3630628,9.4774808] dataset.action_mean=[] dataset.action_std=[] load=outputs/maze2d_medium_xv.ckpt experiment.tasks=[validation] algorithm.guidance_scale=4 +name=maze2d_medium_xv_sampling`
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_large dataset.observation_std=[3.6140624,5.1375184,9.747382,10.5974788] dataset.action_mean=[] dataset.action_std=[] load=outputs/maze2d_large_xv.ckpt experiment.tasks=[validation] algorithm.guidance_scale=4 +name=maze2d_large_xv_sampling`
-
-Here is also ckpt where we take diffused actions,a challenging setting that's not done in prior papers. We haven't got it working as well as original RNN version of diffusion forcing, but it does have okay numbers. You can tune up the guidance scale a bit.
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_medium dataset.observation_std=[2.67,3.04,8,8] dataset.action_std=[6,6] load=outputs/maze2d_medium_xva.ckpt experiment.tasks=[validation] algorithm.guidance_scale=2 algorithm.open_loop_horizon=10 +name=maze2d_medium_xva_sampling`
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_large dataset.observation_std=[3.62,5.14,9.76,10.6] dataset.action_std=[3,3] load=outputs/maze2d_large_xva.ckpt experiment.tasks=[validation] algorithm.guidance_scale=2 algorithm.open_loop_horizon=10 +name=maze2d_large_xva_sampling` -->
 
 ## Training
 
@@ -116,30 +83,6 @@ Please take a look at "Load a checkpoint to eval" paragraph to understand how to
 To see how you can roll out longer than the sequence is trained on, you can find instructions in `quick start with pretrained checkpoints` section. Keep in mind that rolling out infinitely without sliding window is a property of original RNN implementation on `paper` branch, and this version has to use sliding window since it's temporal attention.
 
 By default, we run autoregressive sampling with stablization. To sample next 2 tokens jointly, you can append the following to the above command: `algorithm.scheduling_matrix=full_sequence algorithm.chunk_size=2`.
-
-## Maze Planning
-
-For those who only wish to reproduce the original paper instead of transformer architecture, please checkout`paper` branch of the code instead.
-
-**Medium Maze**
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_medium dataset.action_mean=[] dataset.action_std=[] dataset.observation_mean=[3.5092521,3.4765592] dataset.observation_std=[1.3371079,1.52102] +name=maze2d_medium_x`
-
-**Large Maze**
-
-`python -m main experiment=exp_planning algorithm=df_planning dataset=maze2d_large dataset.observation_mean=[3.7296331,5.3047247] dataset.observation_std=[1.8070312,2.5687592] dataset.action_mean=[] dataset.action_std=[] +name=maze2d_large_x`
-
-**Run planning after model is trained**
-
-Please take a look at "Load a checkpoint to eval" paragraph to understand how to use load checkpoint with `load=`. To sample, simply append `load={wandb_id_of_above_runs} experiment.tasks=[validation] algorithm.guidance_scale=2 +name=maze2d_sampling` to above command after trained. Feel free to tune the `guidance_scale` from 1 - 5.
-
-This version of maze planning uses a different version of diffusion forcing from original paper - while doing the follow up to diffusion forcing, we realized that training with independent noise actually constructed a smooth interpolation between causal and non-causal models too, since we can just masked out future by complete noise (fully causal) or some noise (interpolation). The best thing is, you can still account for causal uncertainty via pyramoid sampling in this setting, by masking out tokens at different noise levels, and you can still have flexible horizon because you can tell the model that padded entries are pure noise, a unique ability of diffusion forcing.
-
-We also reflected a bit about the environment and concluded that the original metric isn't necessarily a good metric, because maze planning should reward those who can plan the fastest route to goal, not a slow walking agent that goes there at the end of episode. The dataset never contains data of staying at the goal, so agents are supposed to walk away after reaching the goal. I think [Diffuser](https://arxiv.org/abs/2205.09991) had an unfair advantage of just generating slow plans, that happend to let the agent stay in the neighbour hood of goal for longer and got very high reward, exploiting flaws in the environment design (a good design would involve penalty of longer time taken to reach goal). So, in this version of code, we just optimize for flexible horizon planning that tries to reach goal asap, and the planner will automatically come back to goal if it left the goal since staying is never in dataset. You can see new metrics we designed in wandb logging interface.
-
-## Timeseries and Robotics
-
-Please checkout `paper` branch for the code used by original paper. If I have time later, I will reimplement these two domains with transformer as well to complete this branch.
 
 # Change Log
 

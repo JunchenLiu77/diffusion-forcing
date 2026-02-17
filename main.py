@@ -8,6 +8,9 @@ Main file for the project. This will create and run new experiments and load che
 Borrowed part of the code from David Charatan and wandb.
 """
 
+import warnings
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
+
 import sys
 import subprocess
 import time

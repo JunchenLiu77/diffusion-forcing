@@ -174,9 +174,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
         Generate noise levels for training.
         """
         num_frames, batch_size, *_ = xs.shape
-        match self.cfg.noise_level:
-            case "random_all":  # entirely random noise levels
-                noise_levels = torch.randint(0, self.timesteps, (num_frames, batch_size), device=xs.device)
+        if self.cfg.noise_level == "random_all":  # entirely random noise levels
+            noise_levels = torch.randint(0, self.timesteps, (num_frames, batch_size), device=xs.device)
+        else:
+            raise ValueError(f"Unknown noise level: {self.cfg.noise_level}")
 
         if masks is not None:
             # for frames that are not available, treat as full noise
@@ -186,15 +187,16 @@ class DiffusionForcingBase(BasePytorchAlgo):
         return noise_levels
 
     def _generate_scheduling_matrix(self, horizon: int):
-        match self.cfg.scheduling_matrix:
-            case "pyramid":
-                return self._generate_pyramid_scheduling_matrix(horizon, self.uncertainty_scale)
-            case "full_sequence":
-                return np.arange(self.sampling_timesteps, -1, -1)[:, None].repeat(horizon, axis=1)
-            case "autoregressive":
-                return self._generate_pyramid_scheduling_matrix(horizon, self.sampling_timesteps)
-            case "trapezoid":
-                return self._generate_trapezoid_scheduling_matrix(horizon, self.uncertainty_scale)
+        if self.cfg.scheduling_matrix == "pyramid":
+            return self._generate_pyramid_scheduling_matrix(horizon, self.uncertainty_scale)
+        elif self.cfg.scheduling_matrix == "full_sequence":
+            return np.arange(self.sampling_timesteps, -1, -1)[:, None].repeat(horizon, axis=1)
+        elif self.cfg.scheduling_matrix == "autoregressive":
+            return self._generate_pyramid_scheduling_matrix(horizon, self.sampling_timesteps)
+        elif self.cfg.scheduling_matrix == "trapezoid":
+            return self._generate_trapezoid_scheduling_matrix(horizon, self.uncertainty_scale)
+        else:
+            raise ValueError(f"Unknown scheduling matrix: {self.cfg.scheduling_matrix}")
 
     def _generate_pyramid_scheduling_matrix(self, horizon: int, uncertainty_scale: float):
         height = self.sampling_timesteps + int((horizon - 1) * uncertainty_scale) + 1

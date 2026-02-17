@@ -1,0 +1,45 @@
+[project]
+name = "diffusion-forcing"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.9"
+dependencies = [
+    # Core ML framework
+    "torch~=2.4.0",
+    "torchvision~=0.19.1",
+    "lightning~=2.1.2",
+    # Experiment tracking
+    "wandb~=0.17.0",
+    "wandb-osh==1.2.1",
+    # Configuration
+    "hydra-core~=1.3.2",
+    "omegaconf~=2.3.0",
+    # Metrics
+    "torchmetrics[image]==0.11.4",
+    # Video / image processing
+    "pytorchvideo~=0.1.5",
+    "opencv-python",
+    "moviepy<2",
+    "imageio",
+    "imageio[ffmpeg]",
+    # Model components
+    "einops",
+    "rotary_embedding_torch",
+    "diffusers",
+    # Visualization & utilities
+    "matplotlib",
+    "colorama",
+    "tqdm",
+    # Dataset download
+    "internetarchive",
+    "setuptools<81",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }

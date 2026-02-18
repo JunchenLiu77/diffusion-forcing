@@ -21,7 +21,7 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.omegaconf import open_dict
 
 from utils.print_utils import cyan
-from utils.ckpt_utils import download_latest_checkpoint, is_run_id
+from utils.ckpt_utils import download_latest_checkpoint, find_latest_local_checkpoint, is_run_id
 from utils.cluster_utils import submit_slurm_job
 from utils.distributed_utils import is_rank_zero
 
@@ -72,6 +72,13 @@ def run_local(cfg: DictConfig):
             config=OmegaConf.to_container(cfg),
             id=resume,
         )
+
+        # Persist the wandb run ID so auto-resubmitted jobs can resume it.
+        if is_rank_zero:
+            wandb_id_file = Path(f"outputs/{cfg.name}/wandb_id")
+            wandb_id_file.parent.mkdir(parents=True, exist_ok=True)
+            wandb_id_file.write_text(logger.experiment.id)
+            print(cyan(f"Wandb run ID saved to:"), wandb_id_file)
     else:
         logger = None
 
@@ -79,18 +86,22 @@ def run_local(cfg: DictConfig):
     resume = cfg.get("resume", None)
     load = cfg.get("load", None)
     checkpoint_path = None
-    load_id = None
     if load and not is_run_id(load):
+        # Explicit local path provided.
         checkpoint_path = load
-    if resume:
-        load_id = resume
+    elif resume:
+        # Prefer a local checkpoint to avoid re-downloading from wandb.
+        local_ckpt = find_latest_local_checkpoint(cfg.name)
+        if local_ckpt:
+            if is_rank_zero:
+                print(cyan(f"Found local checkpoint for resume:"), local_ckpt)
+            checkpoint_path = local_ckpt
+        else:
+            # Fall back to the checkpoint downloaded from wandb (downloaded in run()).
+            run_path = f"{cfg.wandb.entity}/{cfg.wandb.project}/{resume}"
+            checkpoint_path = Path("outputs/downloaded") / run_path / "model.ckpt"
     elif load and is_run_id(load):
-        load_id = load
-    else:
-        load_id = None
-
-    if load_id:
-        run_path = f"{cfg.wandb.entity}/{cfg.wandb.project}/{load_id}"
+        run_path = f"{cfg.wandb.entity}/{cfg.wandb.project}/{load}"
         checkpoint_path = Path("outputs/downloaded") / run_path / "model.ckpt"
 
     if checkpoint_path and is_rank_zero:
@@ -189,8 +200,10 @@ def run(cfg: DictConfig):
         load_id = None
 
     if load_id and "_on_compute_node" not in cfg:
-        run_path = f"{cfg.wandb.entity}/{cfg.wandb.project}/{load_id}"
-        download_latest_checkpoint(run_path, Path("outputs/downloaded"))
+        # Skip download when a local checkpoint already exists (e.g. after auto-resubmit).
+        if not (resume and find_latest_local_checkpoint(cfg.name)):
+            run_path = f"{cfg.wandb.entity}/{cfg.wandb.project}/{load_id}"
+            download_latest_checkpoint(run_path, Path("outputs/downloaded"))
 
     if "cluster" in cfg and not "_on_compute_node" in cfg:
         print(cyan("Slurm detected, submitting to compute node instead of running locally..."))

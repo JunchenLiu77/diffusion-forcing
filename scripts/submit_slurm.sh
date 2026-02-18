@@ -29,7 +29,7 @@ PRE_COMMAND=(
     # "export WANDB_API_KEY=<your_wandb_api_key>"
 )
 COMMAND=(
-    "uv run python -m main +name=${EXP_NAME} dataset=video_minecraft $ARGS"
+    "uv run torchrun --nproc_per_node=${NUM_GPUS} --standalone -m main +name=${EXP_NAME} dataset=video_minecraft $ARGS"
 )
 
 # Build pre-command string (may be empty)

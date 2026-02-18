@@ -172,7 +172,7 @@ class BaseLightningExperiment(BaseExperiment):
         if "checkpointing" in self.cfg.training:
             callbacks.append(
                 ModelCheckpoint(
-                    pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "checkpoints",
+                    pathlib.Path(f"outputs/{self.root_cfg.name}/checkpoints"),
                     **self.cfg.training.checkpointing,
                 )
             )

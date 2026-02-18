@@ -50,8 +50,8 @@ def run_local(cfg: DictConfig):
         (output_dir.parents[1] / "latest-run").unlink(missing_ok=True)
         (output_dir.parents[1] / "latest-run").symlink_to(output_dir, target_is_directory=True)
 
-    # Set up logging with wandb.
-    if cfg.wandb.mode != "disabled":
+    # Set up logging with wandb (rank-0 only; other ranks get no logger).
+    if cfg.wandb.mode != "disabled" and is_rank_zero:
         # If resuming, merge into the existing run on wandb.
         resume = cfg.get("resume", None)
         name = f"{cfg.name} ({output_dir.parent.name}/{output_dir.name})" if resume is None else None
@@ -64,7 +64,7 @@ def run_local(cfg: DictConfig):
         offline = cfg.wandb.mode != "online"
         logger = logger_cls(
             name=name,
-            save_dir=str(output_dir),
+            save_dir=f"outputs/{cfg.name}",
             offline=offline,
             entity=cfg.wandb.entity,
             project=cfg.wandb.project,
@@ -74,11 +74,10 @@ def run_local(cfg: DictConfig):
         )
 
         # Persist the wandb run ID so auto-resubmitted jobs can resume it.
-        if is_rank_zero:
-            wandb_id_file = Path(f"outputs/{cfg.name}/wandb_id")
-            wandb_id_file.parent.mkdir(parents=True, exist_ok=True)
-            wandb_id_file.write_text(logger.experiment.id)
-            print(cyan(f"Wandb run ID saved to:"), wandb_id_file)
+        wandb_id_file = Path(f"outputs/{cfg.name}/wandb_id")
+        wandb_id_file.parent.mkdir(parents=True, exist_ok=True)
+        wandb_id_file.write_text(logger.experiment.id)
+        print(cyan(f"Wandb run ID saved to:"), wandb_id_file)
     else:
         logger = None
 

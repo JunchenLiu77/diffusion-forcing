@@ -20,8 +20,8 @@ if [ -z "$ARGS" ]; then
     ARGS=''
 fi
 
-CONTAINER_IMAGE=/lustre/fsw/portfolios/av/projects/av_alpamayo_cosmos/users/qiwu/containers/qiwu-fast-infer-v6.sqsh
-WORKDIR=/lustre/fsw/portfolios/av/projects/av_alpamayo_cosmos/users/junchenl/diffusion-forcing
+CONTAINER_IMAGE=/lustre/fsw/portfolios/nvr/users/qiwu/containers/nre-ord-dev-v25.12.94_fc0ccde5.sqsh
+WORKDIR=/lustre/fs12/portfolios/nvr/projects/nvr_torontoai_videogen/users/junchenl/diffusion-forcing
 SRUN_TIMEOUT=13200  # 3 hours and 40 minutes in seconds
 
 PRE_COMMAND=(
@@ -29,7 +29,7 @@ PRE_COMMAND=(
     # "export WANDB_API_KEY=<your_wandb_api_key>"
 )
 COMMAND=(
-    "uv run torchrun --nproc_per_node=${NUM_GPUS} --standalone -m main +name=${EXP_NAME} dataset=video_minecraft $ARGS"
+    "OMP_NUM_THREADS=$(($(nproc) / ${NUM_GPUS})) uv run torchrun --nproc_per_node=${NUM_GPUS} --standalone -m main +name=${EXP_NAME} dataset=video_minecraft $ARGS"
 )
 
 # Build pre-command string (may be empty)
